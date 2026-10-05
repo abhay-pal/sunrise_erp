@@ -78,3 +78,22 @@
   .no-print{display:none!important}
   @page{size:A4;margin:0}
 }
+
+/* --- v3.2 real brand, analytics and PDF export --- */
+.real-logo-img{display:block;width:auto;height:44px;object-fit:contain;max-width:210px}
+.sunrise-logo.compact .real-logo-img{height:38px;max-width:54px}
+.modal-brand .real-logo-img{height:48px;max-width:190px}
+.doc-letterhead .real-logo-img{height:72px;max-width:260px}
+.summary-company .real-logo-img{height:34px;max-width:120px}
+.sidebar .sunrise-logo.compact{width:46px;justify-content:center}
+.sidebar .real-logo-img{filter:none}
+.analytics-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px;margin:18px 0}
+.chart-panel{min-width:0}.chart-box{height:320px;margin-top:12px}
+.recharts-default-tooltip{border-radius:10px!important;border:1px solid #e4e7ec!important;box-shadow:0 8px 24px rgba(16,24,40,.08)!important}
+.doc-form input[readonly]{background:#f8fafc;color:#475467}
+.preview-modal .modal-actions{background:#fff;position:sticky;bottom:0;z-index:5}
+.document-sheet{overflow:hidden}
+@media(max-width:980px){.analytics-grid{grid-template-columns:1fr}}
+@media print{
+  .document-sheet .real-logo-img{height:64px!important;max-width:240px!important}
+}
