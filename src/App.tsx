@@ -138,7 +138,7 @@ export default function App() {
     <main className="main">
       <Topbar screen={screen} user={currentUser} />
       <div className="page-wrap">
-        {screen==="dashboard" && <Dashboard counts={counts} billed={billed} records={records} onOpen={setScreen} />}
+        {screen==="dashboard" && <Dashboard records={records} onOpen={setScreen} />}
         {screen==="analytics" && <AnalyticsDashboard records={records} />}
         {screen==="challans" && <DocumentModule type="Challan" role={currentUser.role} records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>can(currentRole,"edit")&&setFormMode({type:"Challan",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
         {screen==="offers" && <DocumentModule type="Offer" role={currentUser.role} records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>can(currentRole,"edit")&&setFormMode({type:"Offer",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
@@ -213,7 +213,45 @@ function Topbar({screen,user}:{screen:Screen;user:UserAccount}) {
   </header>;
 }
 
-function Dashboard({counts,billed,records,onOpen}:{counts:Record<DocType,number>;billed:number;records:DocumentRecord[];onOpen:(s:Screen)=>void}) {
+type DashboardFilters = { from:string; to:string; customer:string; state:string; product:string; };
+
+function applyDashboardFilters(records:DocumentRecord[], filters:DashboardFilters) {
+  return records.filter(r=>{
+    if(filters.from && r.date < filters.from) return false;
+    if(filters.to && r.date > filters.to) return false;
+    if(filters.customer && r.customer !== filters.customer) return false;
+    if(filters.state && r.stateCode !== filters.state) return false;
+    if(filters.product && !r.lines.some(l=>l.description===filters.product)) return false;
+    return true;
+  });
+}
+
+function FilterBar({records,filters,setFilters}:{records:DocumentRecord[];filters:DashboardFilters;setFilters:(f:DashboardFilters)=>void}) {
+  const customers=[...new Set(records.map(r=>r.customer).filter(Boolean))].sort();
+  const states=[...new Set(records.map(r=>r.stateCode).filter(Boolean))].sort();
+  const products=[...new Set(records.flatMap(r=>r.lines.map(l=>l.description)).filter(Boolean))].sort();
+  const active=Object.values(filters).some(Boolean);
+  return <section className="dashboard-filter-bar">
+    <div className="filter-title"><div><span className="eyebrow">FILTER VIEW</span><strong>Refine dashboard</strong></div>{active&&<button className="filter-reset" onClick={()=>setFilters({from:"",to:"",customer:"",state:"",product:""})}>Reset all</button>}</div>
+    <div className="filter-grid">
+      <label>From Date<input type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></label>
+      <label>To Date<input type="date" value={filters.to} onChange={e=>setFilters({...filters,to:e.target.value})}/></label>
+      <label>Customer<select value={filters.customer} onChange={e=>setFilters({...filters,customer:e.target.value})}><option value="">All customers</option>{customers.map(x=><option key={x}>{x}</option>)}</select></label>
+      <label>Location / State<select value={filters.state} onChange={e=>setFilters({...filters,state:e.target.value})}><option value="">All states</option>{states.map(code=><option key={code} value={code}>{GST_STATES[code]||code}</option>)}</select></label>
+      <label>Product<select value={filters.product} onChange={e=>setFilters({...filters,product:e.target.value})}><option value="">All products</option>{products.map(x=><option key={x}>{x}</option>)}</select></label>
+    </div>
+  </section>;
+}
+
+function Dashboard({records,onOpen}:{records:DocumentRecord[];onOpen:(s:Screen)=>void}) {
+  const [filters,setFilters]=useState<DashboardFilters>({from:"",to:"",customer:"",state:"",product:""});
+  const filtered=applyDashboardFilters(records,filters);
+  const counts={
+    Challan:filtered.filter(r=>r.type==="Challan").length,
+    Offer:filtered.filter(r=>r.type==="Offer").length,
+    Invoice:filtered.filter(r=>r.type==="Invoice").length
+  };
+  const billed=filtered.filter(r=>r.type==="Invoice").reduce((a,r)=>a+totals(r.lines).total,0);
   return <>
     <section className="hero">
       <div>
@@ -227,6 +265,7 @@ function Dashboard({counts,billed,records,onOpen}:{counts:Record<DocType,number>
         <div className="flow-node"><ReceiptText/><span>Invoice</span></div>
       </div>
     </section>
+    <FilterBar records={records} filters={filters} setFilters={setFilters}/>
     <section className="kpi-grid">
       <Kpi title="Challans" value={String(counts.Challan)} subtitle="Delivery documents" icon={Truck} />
       <Kpi title="Offers" value={String(counts.Offer)} subtitle="Draft / accepted" icon={ClipboardList} />
@@ -235,14 +274,15 @@ function Dashboard({counts,billed,records,onOpen}:{counts:Record<DocType,number>
     </section>
     <section className="panel">
       <div className="panel-head"><div><span className="eyebrow">RECENT ACTIVITY</span><h3>Latest documents</h3></div><button className="text-btn" onClick={()=>onOpen("documents")}>View all <ArrowRight size={15}/></button></div>
-      <RecordsTable records={records.slice(0,7)} compact />
+      <RecordsTable records={filtered.slice(0,7)} compact />
     </section>
   </>;
 }
 
 
 function AnalyticsDashboard({records}:{records:DocumentRecord[]}) {
-  const invoices=records.filter(r=>r.type==="Invoice");
+  const [filters,setFilters]=useState<DashboardFilters>({from:"",to:"",customer:"",state:"",product:""});
+  const invoices=applyDashboardFilters(records.filter(r=>r.type==="Invoice"),filters);
   const productMap=new Map<string,{name:string;qty:number;revenue:number}>();
   const customerMap=new Map<string,{name:string;revenue:number;orders:number}>();
   const stateMap=new Map<string,{state:string;customers:Set<string>;revenue:number}>();
@@ -281,6 +321,7 @@ function AnalyticsDashboard({records}:{records:DocumentRecord[]}) {
       <div className="module-icon violet"><BarChart3/></div>
       <div className="module-copy"><h2>Sales Analysis Dashboard</h2><p>Invoice-based view of products, customers, customer locations and date-wise sales.</p></div>
     </section>
+    <FilterBar records={records.filter(r=>r.type==="Invoice")} filters={filters} setFilters={setFilters}/>
 
     <section className="kpi-grid">
       <Kpi title="Invoice Revenue" value={money(totalRevenue)} subtitle={invoices.length+" invoices"} icon={BadgeIndianRupee}/>
