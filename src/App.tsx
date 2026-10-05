@@ -98,7 +98,6 @@ export default function App() {
   useEffect(()=>{ if(session) localStorage.setItem("sunrise_session_v1",JSON.stringify(session)); else localStorage.removeItem("sunrise_session_v1"); },[session]);
 
   const currentUser = users.find(u=>u.id===session?.userId && u.active) || null;
-  if(!currentUser) return <LoginPage users={users} onLogin={u=>setSession({userId:u.id})} />;
 
   const counts = useMemo(()=>({
     Challan:records.filter(r=>r.type==="Challan").length,
@@ -130,6 +129,8 @@ export default function App() {
     setFormMode(null);
     setScreen(record.type==="Challan"?"challans":record.type==="Offer"?"offers":"invoices");
   };
+
+  if(!currentUser) return <LoginPage users={users} onLogin={u=>setSession({userId:u.id})} />;
 
   return <div className="app-shell">
     <Sidebar screen={screen} role={currentUser.role} user={currentUser} onChange={s=>{setScreen(s);setFormMode(null)}} onLogout={()=>setSession(null)} />
