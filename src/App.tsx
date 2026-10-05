@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, FileText, Truck, BadgeIndianRupee, Boxes, Settings,
   Plus, Search, ArrowRight, Pencil, X, CheckCircle2, ChevronRight,
-  ClipboardList, ReceiptText, PackageOpen, Eye, Printer, BarChart3, MapPin, Users
+  ClipboardList, ReceiptText, PackageOpen, Eye, Printer, BarChart3, MapPin, Users, Trash2, LogOut, UserPlus, Shield, KeyRound
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -20,7 +20,9 @@ type DocumentRecord = {
   billingAddress:string; shippingAddress:string; stateCode:string; poNo:string; poDate:string;
   remarks:string; status:string; lines:Line[]; referenceOfferNo?:string; createdFromOfferId?:string;
 };
-type Screen = "dashboard" | "analytics" | "challans" | "offers" | "invoices" | "documents" | "items" | "settings";
+type Role = "Admin" | "Manager" | "Viewer";
+type UserAccount = { id:string; name:string; email:string; password:string; role:Role; active:boolean; };
+type Screen = "dashboard" | "analytics" | "challans" | "offers" | "invoices" | "documents" | "items" | "users" | "settings";
 type FormMode = { type:DocType; editing?:DocumentRecord; fromOffer?:DocumentRecord } | null;
 
 const REAL_LOGO = "https://raw.githubusercontent.com/abhay-pal/sunrise_website/main/public/images/logo-transparent.png";
@@ -60,6 +62,14 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 function load<T>(key:string, fallback:T):T {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 }
+const DEFAULT_USERS:UserAccount[] = [{id:"admin-1",name:"Administrator",email:"admin@sunrise.local",password:"Admin@123",role:"Admin",active:true}];
+
+function can(role:Role, action:"create"|"edit"|"delete"|"users") {
+  if(role==="Admin") return true;
+  if(role==="Manager") return action==="create" || action==="edit";
+  return false;
+}
+
 function totals(lines:Line[]) {
   const taxable = lines.reduce((a,l)=>a + l.qty*l.rate*(1-l.discount/100),0);
   const tax = lines.reduce((a,l)=>a + l.qty*l.rate*(1-l.discount/100)*(l.gst/100),0);
@@ -79,9 +89,16 @@ export default function App() {
   const [formMode,setFormMode] = useState<FormMode>(null);
   const [itemModal,setItemModal] = useState<{index?:number; item:Product}|null>(null);
   const [previewDoc,setPreviewDoc] = useState<DocumentRecord|null>(null);
+  const [users,setUsers] = useState<UserAccount[]>(()=>load("sunrise_users_v1",DEFAULT_USERS));
+  const [session,setSession] = useState<{userId:string}|null>(()=>load("sunrise_session_v1",null));
 
   useEffect(()=>localStorage.setItem("sunrise_records_v3",JSON.stringify(records)),[records]);
   useEffect(()=>localStorage.setItem("sunrise_products_v3",JSON.stringify(products)),[products]);
+  useEffect(()=>localStorage.setItem("sunrise_users_v1",JSON.stringify(users)),[users]);
+  useEffect(()=>{ if(session) localStorage.setItem("sunrise_session_v1",JSON.stringify(session)); else localStorage.removeItem("sunrise_session_v1"); },[session]);
+
+  const currentUser = users.find(u=>u.id===session?.userId && u.active) || null;
+  if(!currentUser) return <LoginPage users={users} onLogin={u=>setSession({userId:u.id})} />;
 
   const counts = useMemo(()=>({
     Challan:records.filter(r=>r.type==="Challan").length,
@@ -91,7 +108,16 @@ export default function App() {
 
   const billed = useMemo(()=>records.filter(r=>r.type==="Invoice").reduce((a,r)=>a+totals(r.lines).total,0),[records]);
 
-  const openCreate = (type:DocType, fromOffer?:DocumentRecord) => setFormMode({type,fromOffer});
+  const openCreate = (type:DocType, fromOffer?:DocumentRecord) => {
+    if(!can(currentUser.role,"create")) return;
+    setFormMode({type,fromOffer});
+  };
+  const deleteRecord = (record:DocumentRecord) => {
+    if(!can(currentUser.role,"delete")) return;
+    if(window.confirm(`Delete ${record.type} ${record.no}? This cannot be undone.`)){
+      setRecords(prev=>prev.filter(x=>x.id!==record.id));
+    }
+  };
   const saveRecord = (record:DocumentRecord) => {
     setRecords(prev => {
       const exists = prev.some(x=>x.id===record.id);
@@ -106,17 +132,18 @@ export default function App() {
   };
 
   return <div className="app-shell">
-    <Sidebar screen={screen} onChange={s=>{setScreen(s);setFormMode(null)}} />
+    <Sidebar screen={screen} role={currentUser.role} user={currentUser} onChange={s=>{setScreen(s);setFormMode(null)}} onLogout={()=>setSession(null)} />
     <main className="main">
-      <Topbar screen={screen} />
+      <Topbar screen={screen} user={currentUser} />
       <div className="page-wrap">
         {screen==="dashboard" && <Dashboard counts={counts} billed={billed} records={records} onOpen={setScreen} />}
         {screen==="analytics" && <AnalyticsDashboard records={records} />}
-        {screen==="challans" && <DocumentModule type="Challan" records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>setFormMode({type:"Challan",editing:r})} onPreview={setPreviewDoc} />}
-        {screen==="offers" && <DocumentModule type="Offer" records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>setFormMode({type:"Offer",editing:r})} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
-        {screen==="invoices" && <DocumentModule type="Invoice" records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>setFormMode({type:"Invoice",editing:r})} onPreview={setPreviewDoc} />}
+        {screen==="challans" && <DocumentModule type="Challan" role={currentUser.role} records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>can(currentUser.role,"edit")&&setFormMode({type:"Challan",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
+        {screen==="offers" && <DocumentModule type="Offer" role={currentUser.role} records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>can(currentUser.role,"edit")&&setFormMode({type:"Offer",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
+        {screen==="invoices" && <DocumentModule type="Invoice" role={currentUser.role} records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>can(currentUser.role,"edit")&&setFormMode({type:"Invoice",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
         {screen==="documents" && <AllDocuments records={records} onGo={setScreen} />}
-        {screen==="items" && <ItemMaster products={products} onAdd={()=>setItemModal({item:{description:"",partNo:"",hsn:"",salePrice:0,purchasePrice:0}})} onEdit={(item,index)=>setItemModal({item,index})} />}
+        {screen==="items" && <ItemMaster role={currentUser.role} products={products} onAdd={()=>can(currentUser.role,"create")&&setItemModal({item:{description:"",partNo:"",hsn:"",salePrice:0,purchasePrice:0}})} onEdit={(item,index)=>can(currentUser.role,"edit")&&setItemModal({item,index})} />}
+        {screen==="users" && currentUser.role==="Admin" && <UserManagement users={users} currentUser={currentUser} onChange={setUsers} />}
         {screen==="settings" && <SettingsPanel />}
       </div>
     </main>
@@ -145,7 +172,7 @@ export default function App() {
   </div>;
 }
 
-function Sidebar({screen,onChange}:{screen:Screen;onChange:(s:Screen)=>void}) {
+function Sidebar({screen,role,user,onChange,onLogout}:{screen:Screen;role:Role;user:UserAccount;onChange:(s:Screen)=>void;onLogout:()=>void}) {
   const nav = [
     ["dashboard","Dashboard",LayoutDashboard],
     ["analytics","Analysis Dashboard",BarChart3],
@@ -154,18 +181,19 @@ function Sidebar({screen,onChange}:{screen:Screen;onChange:(s:Screen)=>void}) {
     ["invoices","Invoices",ReceiptText],
     ["documents","All Documents",FileText],
     ["items","Item Master",Boxes],
+    ["users","Users & Roles",Shield],
     ["settings","Settings",Settings]
   ] as const;
   return <aside className="sidebar">
     <div className="brand"><SunriseLogo compact/><div><strong>Sunrise ERP</strong><span>Heavy Machine Service</span></div></div>
     <div className="nav-section">WORKSPACE</div>
-    <nav>{nav.map(([key,label,Icon])=><button key={key} className={"nav-item "+(screen===key?"active":"")} onClick={()=>onChange(key)}><Icon size={18}/><span>{label}</span></button>)}</nav>
+    <nav>{nav.filter(([key])=>key!=="users"||role==="Admin").map(([key,label,Icon])=><button key={key} className={"nav-item "+(screen===key?"active":"")} onClick={()=>onChange(key)}><Icon size={18}/><span>{label}</span></button>)}</nav>
     <div className="sidebar-card"><span>GSTIN</span><strong>{COMPANY.gstin}</strong><small>Business workspace</small></div>
-    <div className="sidebar-user"><div className="avatar">AP</div><div><strong>Administrator</strong><span>Full access</span></div></div>
+    <div className="sidebar-user"><div className="avatar">{user.name.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase()}</div><div className="sidebar-user-copy"><strong>{user.name}</strong><span>{user.role}</span></div><button className="logout-mini" title="Logout" onClick={onLogout}><LogOut size={16}/></button></div>
   </aside>;
 }
 
-function Topbar({screen}:{screen:Screen}) {
+function Topbar({screen,user}:{screen:Screen;user:UserAccount}) {
   const titles:Record<Screen,[string,string]> = {
     dashboard:["Dashboard","Business overview"],
     analytics:["Analysis Dashboard","Sales, customer, product and location intelligence"],
@@ -174,11 +202,12 @@ function Topbar({screen}:{screen:Screen}) {
     invoices:["Invoices","Create and manage tax invoices"],
     documents:["All Documents","Unified document register"],
     items:["Item Master","Manage reusable products & services"],
+    users:["Users & Roles","Admin user and access management"],
     settings:["Settings","Company and document configuration"]
   };
   return <header className="topbar">
     <div><span className="eyebrow">{titles[screen][1]}</span><h1>{titles[screen][0]}</h1></div>
-    <div className="top-status"><CheckCircle2 size={16}/><span>ERP UI v3</span></div>
+    <div className="top-user-chip"><div className="avatar small">{user.name.slice(0,1).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.role}</span></div></div>
   </header>;
 }
 
@@ -293,7 +322,7 @@ function Kpi({title,value,subtitle,icon:Icon}:{title:string;value:string;subtitl
   return <article className="kpi-card"><div className="kpi-icon"><Icon size={19}/></div><div><span>{title}</span><strong>{value}</strong><small>{subtitle}</small></div></article>;
 }
 
-function DocumentModule({type,records,onCreate,onEdit,onPreview,onConvert}:{type:DocType;records:DocumentRecord[];onCreate:()=>void;onEdit:(r:DocumentRecord)=>void;onPreview:(r:DocumentRecord)=>void;onConvert?:(r:DocumentRecord)=>void}) {
+function DocumentModule({type,role,records,onCreate,onEdit,onDelete,onPreview,onConvert}:{type:DocType;role:Role;records:DocumentRecord[];onCreate:()=>void;onEdit:(r:DocumentRecord)=>void;onDelete:(r:DocumentRecord)=>void;onPreview:(r:DocumentRecord)=>void;onConvert?:(r:DocumentRecord)=>void}) {
   const meta=typeMeta[type], Icon=meta.icon;
   const list=records.filter(r=>r.type===type);
   const [query,setQuery]=useState("");
@@ -302,7 +331,7 @@ function DocumentModule({type,records,onCreate,onEdit,onPreview,onConvert}:{type
     <section className="module-head">
       <div className={"module-icon "+meta.tone}><Icon/></div>
       <div className="module-copy"><h2>{meta.label}s</h2><p>{type==="Offer"?"Create offers, track status and convert accepted offers into invoices.":type==="Challan"?"Create delivery challans with material and vehicle details.":"Create tax invoices with linked offer references and GST calculations."}</p></div>
-      <button className="primary-btn" onClick={onCreate}><Plus size={17}/> Create {meta.label}</button>
+      {can(role,"create")&&<button className="primary-btn" onClick={onCreate}><Plus size={17}/> Create {meta.label}</button>}
     </section>
     <section className="panel">
       <div className="toolbar"><div className="search"><Search size={17}/><input placeholder={"Search "+meta.label.toLowerCase()+"..."} value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="count-chip">{filtered.length} records</div></div>
@@ -310,7 +339,7 @@ function DocumentModule({type,records,onCreate,onEdit,onPreview,onConvert}:{type
         <table><thead><tr><th>No.</th><th>Date</th><th>Customer</th>{type==="Invoice"&&<th>Offer Ref.</th>}<th>Amount</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{filtered.length?filtered.map(r=>{
           const total=totals(r.lines).total;
-          return <tr key={r.id}><td><strong>{r.no}</strong></td><td>{r.date}</td><td>{r.customer}</td>{type==="Invoice"&&<td>{r.referenceOfferNo||"—"}</td>}<td>{type==="Challan"?"—":money(total)}</td><td><Status value={r.status}/></td><td><div className="row-actions"><button className="icon-btn" title="Preview" onClick={()=>onPreview(r)}><Eye size={15}/></button><button className="icon-btn" title="Edit" onClick={()=>onEdit(r)}><Pencil size={15}/></button>{type==="Offer"&&r.status!=="Converted"&&<button className="convert-btn" onClick={()=>onConvert?.(r)}>Convert to Invoice <ArrowRight size={14}/></button>}</div></td></tr>
+          return <tr key={r.id}><td><strong>{r.no}</strong></td><td>{r.date}</td><td>{r.customer}</td>{type==="Invoice"&&<td>{r.referenceOfferNo||"—"}</td>}<td>{type==="Challan"?"—":money(total)}</td><td><Status value={r.status}/></td><td><div className="row-actions"><button className="icon-btn" title="Preview" onClick={()=>onPreview(r)}><Eye size={15}/></button>{can(role,"edit")&&<button className="icon-btn" title="Edit" onClick={()=>onEdit(r)}><Pencil size={15}/></button>}{can(role,"delete")&&<button className="icon-btn danger" title="Delete" onClick={()=>onDelete(r)}><Trash2 size={15}/></button>}{type==="Offer"&&r.status!=="Converted"&&can(role,"create")&&<button className="convert-btn" onClick={()=>onConvert?.(r)}>Convert to Invoice <ArrowRight size={14}/></button>}</div></td></tr>
         }):<tr><td colSpan={7}><Empty label={"No "+meta.label.toLowerCase()+" created yet."}/></td></tr>}</tbody></table>
       </div>
     </section>
@@ -336,19 +365,19 @@ function RecordsTable({records,compact,onGo}:{records:DocumentRecord[];compact?:
 function Status({value}:{value:string}) { return <span className={"status "+value.toLowerCase().replaceAll(" ","-")}>{value}</span>; }
 function Empty({label}:{label:string}) { return <div className="empty"><PackageOpen size={28}/><span>{label}</span></div>; }
 
-function ItemMaster({products,onAdd,onEdit}:{products:Product[];onAdd:()=>void;onEdit:(p:Product,i:number)=>void}) {
+function ItemMaster({role,products,onAdd,onEdit}:{role:Role;products:Product[];onAdd:()=>void;onEdit:(p:Product,i:number)=>void}) {
   const [q,setQ]=useState("");
   const filtered=products.map((p,index)=>({p,index})).filter(({p})=>(p.description+" "+p.partNo+" "+p.hsn).toLowerCase().includes(q.toLowerCase()));
   return <>
     <section className="module-head">
       <div className="module-icon violet"><Boxes/></div>
       <div className="module-copy"><h2>Item Master</h2><p>Add and edit products used in Challan, Offer and Invoice dropdowns.</p></div>
-      <button className="primary-btn" onClick={onAdd}><Plus size={17}/> Add Item</button>
+      {can(role,"create")&&<button className="primary-btn" onClick={onAdd}><Plus size={17}/> Add Item</button>}
     </section>
     <section className="panel">
       <div className="toolbar"><div className="search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search description, part no. or HSN..."/></div><div className="count-chip">{products.length} items</div></div>
       <div className="table-scroll"><table><thead><tr><th>Description</th><th>Part No.</th><th>HSN/SAC</th><th>Sale Price</th><th>Purchase Price</th><th></th></tr></thead><tbody>
-        {filtered.map(({p,index})=><tr key={index}><td><strong>{p.description}</strong></td><td>{p.partNo||"—"}</td><td>{p.hsn}</td><td>{money(p.salePrice)}</td><td>{money(p.purchasePrice)}</td><td><button className="icon-btn" onClick={()=>onEdit(p,index)}><Pencil size={15}/></button></td></tr>)}
+        {filtered.map(({p,index})=><tr key={index}><td><strong>{p.description}</strong></td><td>{p.partNo||"—"}</td><td>{p.hsn}</td><td>{money(p.salePrice)}</td><td>{money(p.purchasePrice)}</td><td>{can(role,"edit")&&<button className="icon-btn" onClick={()=>onEdit(p,index)}><Pencil size={15}/></button>}</td></tr>)}
       </tbody></table></div>
     </section>
   </>;
@@ -500,6 +529,66 @@ function DocumentPreview({doc,onClose}:{doc:DocumentRecord;onClose:()=>void}) {
 
 function FormSection({number,title,children,action}:{number:string;title:string;children:any;action?:any}) {
   return <section className="form-section"><div className="section-head"><div><span className="step">{number}</span><h4>{title}</h4></div>{action}</div>{children}</section>;
+}
+
+function LoginPage({users,onLogin}:{users:UserAccount[];onLogin:(u:UserAccount)=>void}) {
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const submit=(e:any)=>{
+    e.preventDefault();
+    const user=users.find(u=>u.active&&u.email.toLowerCase()===email.trim().toLowerCase()&&u.password===password);
+    if(!user){setError("Invalid email or password.");return;}
+    setError("");onLogin(user);
+  };
+  return <div className="login-page">
+    <div className="login-visual"><SunriseLogo/><div><span className="hero-tag">SUNRISE ERP</span><h1>Business documents.<br/>Controlled access.</h1><p>Challan, quotation, invoicing and sales intelligence in one secure workspace.</p></div></div>
+    <form className="login-card" onSubmit={submit}>
+      <div className="login-logo"><SunriseLogo/></div>
+      <span className="eyebrow">WELCOME BACK</span><h2>Sign in to ERP</h2><p>Use your assigned Sunrise ERP account.</p>
+      <label>Email<input autoFocus type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com" required/></label>
+      <label>Password<div className="password-field"><KeyRound size={16}/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" required/></div></label>
+      {error&&<div className="login-error">{error}</div>}
+      <button className="primary-btn block" type="submit">Sign In</button>
+      <div className="demo-login"><strong>First login</strong><span>admin@sunrise.local</span><span>Admin@123</span></div>
+    </form>
+  </div>;
+}
+
+function UserManagement({users,currentUser,onChange}:{users:UserAccount[];currentUser:UserAccount;onChange:(u:UserAccount[])=>void}) {
+  const empty={name:"",email:"",password:"",role:"Viewer" as Role};
+  const [form,setForm]=useState(empty);
+  const addUser=(e:any)=>{
+    e.preventDefault();
+    if(users.some(u=>u.email.toLowerCase()===form.email.toLowerCase())){alert("Email already exists.");return;}
+    onChange([...users,{id:uid(),...form,active:true}]);
+    setForm(empty);
+  };
+  const updateUser=(id:string,patch:Partial<UserAccount>)=>onChange(users.map(u=>u.id===id?{...u,...patch}:u));
+  const removeUser=(u:UserAccount)=>{
+    if(u.id===currentUser.id){alert("You cannot delete your own logged-in account.");return;}
+    if(window.confirm(`Delete user ${u.name}?`)) onChange(users.filter(x=>x.id!==u.id));
+  };
+  return <>
+    <section className="module-head"><div className="module-icon violet"><Shield/></div><div className="module-copy"><h2>Users & Role Access</h2><p>Admin can create users and control their ERP permission level.</p></div></section>
+    <div className="user-admin-grid">
+      <section className="panel">
+        <div className="panel-head"><div><span className="eyebrow">USERS</span><h3>Active accounts</h3></div><div className="count-chip">{users.length} users</div></div>
+        <div className="table-scroll"><table><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>
+          {users.map(u=><tr key={u.id}><td><strong>{u.name}</strong></td><td>{u.email}</td><td><select value={u.role} disabled={u.id===currentUser.id} onChange={e=>updateUser(u.id,{role:e.target.value as Role})}><option>Admin</option><option>Manager</option><option>Viewer</option></select></td><td><button className={"status-toggle "+(u.active?"on":"off")} disabled={u.id===currentUser.id} onClick={()=>updateUser(u.id,{active:!u.active})}>{u.active?"Active":"Disabled"}</button></td><td>{u.id!==currentUser.id&&<button className="icon-btn danger" onClick={()=>removeUser(u)}><Trash2 size={15}/></button>}</td></tr>)}
+        </tbody></table></div>
+      </section>
+      <form className="panel create-user-card" onSubmit={addUser}>
+        <div className="panel-head"><div><span className="eyebrow">ADMIN ONLY</span><h3>Create user</h3></div><UserPlus size={20}/></div>
+        <label>Full Name<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required/></label>
+        <label>Email<input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} required/></label>
+        <label>Temporary Password<input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} minLength={6} required/></label>
+        <label>Role<select value={form.role} onChange={e=>setForm({...form,role:e.target.value as Role})}><option>Admin</option><option>Manager</option><option>Viewer</option></select></label>
+        <div className="role-help"><strong>Admin</strong><span>Full access + delete + user management</span><strong>Manager</strong><span>Create/edit documents and items, no delete/users</span><strong>Viewer</strong><span>Read-only access and analytics</span></div>
+        <button className="primary-btn block" type="submit"><UserPlus size={16}/> Create User</button>
+      </form>
+    </div>
+  </>;
 }
 
 function SettingsPanel(){
