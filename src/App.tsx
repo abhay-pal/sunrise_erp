@@ -369,16 +369,55 @@ function Empty({label}:{label:string}) { return <div className="empty"><PackageO
 
 function ItemMaster({role,products,onAdd,onEdit}:{role:Role;products:Product[];onAdd:()=>void;onEdit:(p:Product,i:number)=>void}) {
   const [q,setQ]=useState("");
-  const filtered=products.map((p,index)=>({p,index})).filter(({p})=>(p.description+" "+p.partNo+" "+p.hsn).toLowerCase().includes(q.toLowerCase()));
+  const [sortBy,setSortBy]=useState<"description"|"partNo"|"hsn"|"salePrice"|"purchasePrice">("description");
+  const [sortDir,setSortDir]=useState<"asc"|"desc">("asc");
+
+  const filtered=products
+    .map((p,index)=>({p,index}))
+    .filter(({p})=>(p.description+" "+p.partNo+" "+p.hsn).toLowerCase().includes(q.toLowerCase()))
+    .sort((a,b)=>{
+      const av=a.p[sortBy], bv=b.p[sortBy];
+      const cmp = typeof av==="number" && typeof bv==="number"
+        ? av-bv
+        : String(av??"").localeCompare(String(bv??""),undefined,{numeric:true,sensitivity:"base"});
+      return sortDir==="asc"?cmp:-cmp;
+    });
+
+  const toggleSort=(field:typeof sortBy)=>{
+    if(sortBy===field) setSortDir(sortDir==="asc"?"desc":"asc");
+    else { setSortBy(field); setSortDir("asc"); }
+  };
+  const sortMark=(field:typeof sortBy)=>sortBy===field?(sortDir==="asc"?" ↑":" ↓"):"";
+
   return <>
     <section className="module-head">
       <div className="module-icon violet"><Boxes/></div>
-      <div className="module-copy"><h2>Item Master</h2><p>Add and edit products used in Challan, Offer and Invoice dropdowns.</p></div>
+      <div className="module-copy"><h2>Item Master</h2><p>Add, edit, search and sort products used in Challan, Offer and Invoice dropdowns.</p></div>
       {can(role,"create")&&<button className="primary-btn" onClick={onAdd}><Plus size={17}/> Add Item</button>}
     </section>
     <section className="panel">
-      <div className="toolbar"><div className="search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search description, part no. or HSN..."/></div><div className="count-chip">{products.length} items</div></div>
-      <div className="table-scroll"><table><thead><tr><th>Description</th><th>Part No.</th><th>HSN/SAC</th><th>Sale Price</th><th>Purchase Price</th><th></th></tr></thead><tbody>
+      <div className="toolbar item-toolbar">
+        <div className="search"><Search size={17}/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search description, part no. or HSN..."/></div>
+        <div className="item-toolbar-actions">
+          <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value as typeof sortBy)}>
+            <option value="description">Sort: Description</option>
+            <option value="partNo">Sort: Part No.</option>
+            <option value="hsn">Sort: HSN/SAC</option>
+            <option value="salePrice">Sort: Sale Price</option>
+            <option value="purchasePrice">Sort: Purchase Price</option>
+          </select>
+          <button className="secondary-btn sort-dir-btn" onClick={()=>setSortDir(sortDir==="asc"?"desc":"asc")}>{sortDir==="asc"?"A → Z / Low → High":"Z → A / High → Low"}</button>
+          <div className="count-chip">{filtered.length} / {products.length} items</div>
+        </div>
+      </div>
+      <div className="table-scroll"><table><thead><tr>
+        <th><button className="sort-head" onClick={()=>toggleSort("description")}>Description{sortMark("description")}</button></th>
+        <th><button className="sort-head" onClick={()=>toggleSort("partNo")}>Part No.{sortMark("partNo")}</button></th>
+        <th><button className="sort-head" onClick={()=>toggleSort("hsn")}>HSN/SAC{sortMark("hsn")}</button></th>
+        <th><button className="sort-head" onClick={()=>toggleSort("salePrice")}>Sale Price{sortMark("salePrice")}</button></th>
+        <th><button className="sort-head" onClick={()=>toggleSort("purchasePrice")}>Purchase Price{sortMark("purchasePrice")}</button></th>
+        <th></th>
+      </tr></thead><tbody>
         {filtered.map(({p,index})=><tr key={index}><td><strong>{p.description}</strong></td><td>{p.partNo||"—"}</td><td>{p.hsn}</td><td>{money(p.salePrice)}</td><td>{money(p.purchasePrice)}</td><td>{can(role,"edit")&&<button className="icon-btn" onClick={()=>onEdit(p,index)}><Pencil size={15}/></button>}</td></tr>)}
       </tbody></table></div>
     </section>
