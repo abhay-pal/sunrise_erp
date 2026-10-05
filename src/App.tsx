@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, FileText, Truck, BadgeIndianRupee, Boxes, Settings,
   Plus, Search, ArrowRight, Pencil, X, CheckCircle2, ChevronRight,
-  ClipboardList, ReceiptText, PackageOpen
+  ClipboardList, ReceiptText, PackageOpen, Eye, Printer
 } from "lucide-react";
 import { PRODUCTS as BASE_PRODUCTS, Product } from "./data";
 import "./styles.css";
@@ -48,12 +48,24 @@ function totals(lines:Line[]) {
   return { taxable, tax, total: taxable+tax };
 }
 
+function SunriseLogo({compact=false}:{compact?:boolean}) {
+  return <div className={"sunrise-logo "+(compact?"compact":"")}>
+    <div className="sunrise-symbol" aria-label="Sunrise Heavy Machine Service logo">
+      <span className="sun-core">S</span>
+      <span className="sun-ray r1"></span><span className="sun-ray r2"></span><span className="sun-ray r3"></span>
+      <span className="sun-ray r4"></span><span className="sun-ray r5"></span>
+    </div>
+    {!compact && <div className="sunrise-wordmark"><strong>SUNRISE</strong><span>HEAVY MACHINE SERVICE</span></div>}
+  </div>;
+}
+
 export default function App() {
   const [screen,setScreen] = useState<Screen>("dashboard");
   const [records,setRecords] = useState<DocumentRecord[]>(()=>load("sunrise_records_v3",[]));
   const [products,setProducts] = useState<Product[]>(()=>load("sunrise_products_v3",BASE_PRODUCTS));
   const [formMode,setFormMode] = useState<FormMode>(null);
   const [itemModal,setItemModal] = useState<{index?:number; item:Product}|null>(null);
+  const [previewDoc,setPreviewDoc] = useState<DocumentRecord|null>(null);
 
   useEffect(()=>localStorage.setItem("sunrise_records_v3",JSON.stringify(records)),[records]);
   useEffect(()=>localStorage.setItem("sunrise_products_v3",JSON.stringify(products)),[products]);
@@ -86,9 +98,9 @@ export default function App() {
       <Topbar screen={screen} />
       <div className="page-wrap">
         {screen==="dashboard" && <Dashboard counts={counts} billed={billed} records={records} onOpen={setScreen} />}
-        {screen==="challans" && <DocumentModule type="Challan" records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>setFormMode({type:"Challan",editing:r})} />}
-        {screen==="offers" && <DocumentModule type="Offer" records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>setFormMode({type:"Offer",editing:r})} onConvert={r=>openCreate("Invoice",r)} />}
-        {screen==="invoices" && <DocumentModule type="Invoice" records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>setFormMode({type:"Invoice",editing:r})} />}
+        {screen==="challans" && <DocumentModule type="Challan" records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>setFormMode({type:"Challan",editing:r})} onPreview={setPreviewDoc} />}
+        {screen==="offers" && <DocumentModule type="Offer" records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>setFormMode({type:"Offer",editing:r})} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
+        {screen==="invoices" && <DocumentModule type="Invoice" records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>setFormMode({type:"Invoice",editing:r})} onPreview={setPreviewDoc} />}
         {screen==="documents" && <AllDocuments records={records} onGo={setScreen} />}
         {screen==="items" && <ItemMaster products={products} onAdd={()=>setItemModal({item:{description:"",partNo:"",hsn:"",salePrice:0,purchasePrice:0}})} onEdit={(item,index)=>setItemModal({item,index})} />}
         {screen==="settings" && <SettingsPanel />}
@@ -102,6 +114,8 @@ export default function App() {
       onClose={()=>setFormMode(null)}
       onSave={saveRecord}
     />}
+
+    {previewDoc && <DocumentPreview doc={previewDoc} onClose={()=>setPreviewDoc(null)} />}
 
     {itemModal && <ItemEditor
       value={itemModal.item}
@@ -128,7 +142,7 @@ function Sidebar({screen,onChange}:{screen:Screen;onChange:(s:Screen)=>void}) {
     ["settings","Settings",Settings]
   ] as const;
   return <aside className="sidebar">
-    <div className="brand"><div className="brand-mark">SH</div><div><strong>Sunrise ERP</strong><span>Heavy Machine Service</span></div></div>
+    <div className="brand"><SunriseLogo compact/><div><strong>Sunrise ERP</strong><span>Heavy Machine Service</span></div></div>
     <div className="nav-section">WORKSPACE</div>
     <nav>{nav.map(([key,label,Icon])=><button key={key} className={"nav-item "+(screen===key?"active":"")} onClick={()=>onChange(key)}><Icon size={18}/><span>{label}</span></button>)}</nav>
     <div className="sidebar-card"><span>GSTIN</span><strong>{COMPANY.gstin}</strong><small>Business workspace</small></div>
@@ -183,7 +197,7 @@ function Kpi({title,value,subtitle,icon:Icon}:{title:string;value:string;subtitl
   return <article className="kpi-card"><div className="kpi-icon"><Icon size={19}/></div><div><span>{title}</span><strong>{value}</strong><small>{subtitle}</small></div></article>;
 }
 
-function DocumentModule({type,records,onCreate,onEdit,onConvert}:{type:DocType;records:DocumentRecord[];onCreate:()=>void;onEdit:(r:DocumentRecord)=>void;onConvert?:(r:DocumentRecord)=>void}) {
+function DocumentModule({type,records,onCreate,onEdit,onPreview,onConvert}:{type:DocType;records:DocumentRecord[];onCreate:()=>void;onEdit:(r:DocumentRecord)=>void;onPreview:(r:DocumentRecord)=>void;onConvert?:(r:DocumentRecord)=>void}) {
   const meta=typeMeta[type], Icon=meta.icon;
   const list=records.filter(r=>r.type===type);
   const [query,setQuery]=useState("");
@@ -200,7 +214,7 @@ function DocumentModule({type,records,onCreate,onEdit,onConvert}:{type:DocType;r
         <table><thead><tr><th>No.</th><th>Date</th><th>Customer</th>{type==="Invoice"&&<th>Offer Ref.</th>}<th>Amount</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>{filtered.length?filtered.map(r=>{
           const total=totals(r.lines).total;
-          return <tr key={r.id}><td><strong>{r.no}</strong></td><td>{r.date}</td><td>{r.customer}</td>{type==="Invoice"&&<td>{r.referenceOfferNo||"—"}</td>}<td>{type==="Challan"?"—":money(total)}</td><td><Status value={r.status}/></td><td><div className="row-actions"><button className="icon-btn" title="Edit" onClick={()=>onEdit(r)}><Pencil size={15}/></button>{type==="Offer"&&r.status!=="Converted"&&<button className="convert-btn" onClick={()=>onConvert?.(r)}>Convert to Invoice <ArrowRight size={14}/></button>}</div></td></tr>
+          return <tr key={r.id}><td><strong>{r.no}</strong></td><td>{r.date}</td><td>{r.customer}</td>{type==="Invoice"&&<td>{r.referenceOfferNo||"—"}</td>}<td>{type==="Challan"?"—":money(total)}</td><td><Status value={r.status}/></td><td><div className="row-actions"><button className="icon-btn" title="Preview" onClick={()=>onPreview(r)}><Eye size={15}/></button><button className="icon-btn" title="Edit" onClick={()=>onEdit(r)}><Pencil size={15}/></button>{type==="Offer"&&r.status!=="Converted"&&<button className="convert-btn" onClick={()=>onConvert?.(r)}>Convert to Invoice <ArrowRight size={14}/></button>}</div></td></tr>
         }):<tr><td colSpan={7}><Empty label={"No "+meta.label.toLowerCase()+" created yet."}/></td></tr>}</tbody></table>
       </div>
     </section>
@@ -293,7 +307,7 @@ function DocumentForm({mode,products,records,onClose,onSave}:{mode:NonNullable<F
   };
 
   return <div className="overlay"><div className="modal doc-modal">
-    <div className="modal-head sticky"><div><span className="eyebrow">{mode.editing?"EDIT":"CREATE"} {meta.label.toUpperCase()}</span><h3>{mode.editing?doc.no:"New "+meta.label}</h3>{doc.referenceOfferNo&&<div className="reference-badge">Linked Offer: <strong>{doc.referenceOfferNo}</strong></div>}</div><button className="close-btn" onClick={onClose}><X/></button></div>
+    <div className="modal-head sticky"><div className="modal-brand"><SunriseLogo/><div><span className="eyebrow">{mode.editing?"EDIT":"CREATE"} {meta.label.toUpperCase()}</span><h3>{mode.editing?doc.no:"New "+meta.label}</h3>{doc.referenceOfferNo&&<div className="reference-badge">Linked Offer: <strong>{doc.referenceOfferNo}</strong></div>}</div></div><button className="close-btn" onClick={onClose}><X/></button></div>
     <div className="doc-form-layout">
       <div className="doc-form">
         <FormSection number="01" title="Document details"><div className="form-grid four">
@@ -322,7 +336,7 @@ function DocumentForm({mode,products,records,onClose,onSave}:{mode:NonNullable<F
       </div>
 
       <aside className="summary-card">
-        <div className="summary-title"><div className={"summary-icon "+meta.tone}><meta.icon size={20}/></div><div><strong>{meta.label}</strong><span>{doc.no}</span></div></div>
+        <div className="summary-company"><SunriseLogo compact/><span>SUNRISE</span></div><div className="summary-title"><div className={"summary-icon "+meta.tone}><meta.icon size={20}/></div><div><strong>{meta.label}</strong><span>{doc.no}</span></div></div>
         <div className="summary-row"><span>Customer</span><strong>{doc.customer||"—"}</strong></div>
         <div className="summary-row"><span>Line items</span><strong>{doc.lines.length}</strong></div>
         {mode.type!=="Challan"&&<><div className="summary-row"><span>Taxable</span><strong>{money(sum.taxable)}</strong></div><div className="summary-row"><span>GST</span><strong>{money(sum.tax)}</strong></div><div className="summary-total"><span>Grand Total</span><strong>{money(sum.total)}</strong></div></>}
@@ -330,6 +344,36 @@ function DocumentForm({mode,products,records,onClose,onSave}:{mode:NonNullable<F
         <button className="primary-btn block" onClick={()=>doc.customer&&doc.lines.some(l=>l.description)&&onSave(doc)}>{mode.editing?"Update":"Save"} {meta.label}</button>
       </aside>
     </div>
+  </div></div>;
+}
+
+function DocumentPreview({doc,onClose}:{doc:DocumentRecord;onClose:()=>void}) {
+  const meta=typeMeta[doc.type];
+  const sum=totals(doc.lines);
+  return <div className="overlay preview-overlay"><div className="modal preview-modal">
+    <div className="modal-head no-print"><div className="modal-brand"><SunriseLogo/><div><span className="eyebrow">DOCUMENT PREVIEW</span><h3>{meta.label} · {doc.no}</h3></div></div><button className="close-btn" onClick={onClose}><X/></button></div>
+    <div className="document-sheet" id="print-document">
+      <div className="doc-letterhead">
+        <SunriseLogo/>
+        <div className="company-meta"><strong>{COMPANY.name}</strong><span>{COMPANY.address}</span><span>GSTIN: {COMPANY.gstin} · Ph: {COMPANY.phone}</span><span>{COMPANY.email}</span></div>
+      </div>
+      <div className="doc-title-row"><div><span>{meta.label.toUpperCase()}</span><strong>{doc.no}</strong></div><div><span>Date</span><strong>{doc.date}</strong></div></div>
+      {doc.referenceOfferNo && <div className="doc-reference">Reference Offer: <strong>{doc.referenceOfferNo}</strong></div>}
+      <div className="party-grid">
+        <div><span className="doc-label">BILL TO / CUSTOMER</span><strong>{doc.customer}</strong><p>{doc.billingAddress||"—"}</p><small>GSTIN: {doc.gstin||"—"} · State Code: {doc.stateCode||"—"}</small></div>
+        <div><span className="doc-label">SHIP TO</span><strong>{doc.customer}</strong><p>{doc.shippingAddress||doc.billingAddress||"—"}</p><small>PO / Ref: {doc.poNo||"—"} {doc.poDate?(" · "+doc.poDate):""}</small></div>
+      </div>
+      <table className="print-table"><thead><tr><th>#</th><th>Description</th><th>Part No.</th><th>HSN/SAC</th><th>Qty</th>{doc.type!=="Challan"&&<><th>Rate</th><th>Disc%</th><th>GST%</th><th>Amount</th></>}</tr></thead><tbody>
+        {doc.lines.map((l,i)=><tr key={i}><td>{i+1}</td><td>{l.description}</td><td>{l.partNo||"—"}</td><td>{l.hsn||"—"}</td><td>{l.qty}</td>{doc.type!=="Challan"&&<><td>{money(l.rate)}</td><td>{l.discount}%</td><td>{l.gst}%</td><td>{money(totals([l]).total)}</td></>}</tr>)}
+      </tbody></table>
+      {doc.type!=="Challan"&&<div className="doc-totals"><div><span>Taxable Value</span><strong>{money(sum.taxable)}</strong></div><div><span>GST</span><strong>{money(sum.tax)}</strong></div><div className="grand"><span>Grand Total</span><strong>{money(sum.total)}</strong></div></div>}
+      {doc.remarks&&<div className="doc-remarks"><span className="doc-label">REMARKS / TERMS</span><p>{doc.remarks}</p></div>}
+      <div className="doc-footer">
+        <div><strong>Bank Details</strong><span>{COMPANY.bank} · A/C {COMPANY.account}</span><span>IFSC {COMPANY.ifsc} · {COMPANY.branch}</span></div>
+        <div className="signature"><span>For {COMPANY.name}</span><strong>Authorised Signatory</strong></div>
+      </div>
+    </div>
+    <div className="modal-actions no-print"><button className="secondary-btn" onClick={onClose}>Close</button><button className="primary-btn" onClick={()=>window.print()}><Printer size={16}/> Print / Save PDF</button></div>
   </div></div>;
 }
 
