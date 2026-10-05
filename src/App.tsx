@@ -2,8 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, FileText, Truck, BadgeIndianRupee, Boxes, Settings,
   Plus, Search, ArrowRight, Pencil, X, CheckCircle2, ChevronRight,
-  ClipboardList, ReceiptText, PackageOpen, Eye, Printer
+  ClipboardList, ReceiptText, PackageOpen, Eye, Printer, BarChart3, MapPin, Users
 } from "lucide-react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  LineChart, Line, PieChart, Pie, Cell
+} from "recharts";
 import { PRODUCTS as BASE_PRODUCTS, Product } from "./data";
 import "./styles.css";
 
@@ -14,8 +20,20 @@ type DocumentRecord = {
   billingAddress:string; shippingAddress:string; stateCode:string; poNo:string; poDate:string;
   remarks:string; status:string; lines:Line[]; referenceOfferNo?:string; createdFromOfferId?:string;
 };
-type Screen = "dashboard" | "challans" | "offers" | "invoices" | "documents" | "items" | "settings";
+type Screen = "dashboard" | "analytics" | "challans" | "offers" | "invoices" | "documents" | "items" | "settings";
 type FormMode = { type:DocType; editing?:DocumentRecord; fromOffer?:DocumentRecord } | null;
+
+const REAL_LOGO = "https://raw.githubusercontent.com/abhay-pal/sunrise_website/main/public/images/logo-transparent.png";
+
+const GST_STATES:Record<string,string> = {
+  "01":"Jammu & Kashmir","02":"Himachal Pradesh","03":"Punjab","04":"Chandigarh","05":"Uttarakhand",
+  "06":"Haryana","07":"Delhi","08":"Rajasthan","09":"Uttar Pradesh","10":"Bihar","11":"Sikkim",
+  "12":"Arunachal Pradesh","13":"Nagaland","14":"Manipur","15":"Mizoram","16":"Tripura","17":"Meghalaya",
+  "18":"Assam","19":"West Bengal","20":"Jharkhand","21":"Odisha","22":"Chhattisgarh","23":"Madhya Pradesh",
+  "24":"Gujarat","26":"Dadra & Nagar Haveli and Daman & Diu","27":"Maharashtra","29":"Karnataka",
+  "30":"Goa","31":"Lakshadweep","32":"Kerala","33":"Tamil Nadu","34":"Puducherry","35":"Andaman & Nicobar Islands",
+  "36":"Telangana","37":"Andhra Pradesh","38":"Ladakh"
+};
 
 const COMPANY = {
   name:"SUNRISE HEAVY MACHINE SERVICE",
@@ -50,12 +68,7 @@ function totals(lines:Line[]) {
 
 function SunriseLogo({compact=false}:{compact?:boolean}) {
   return <div className={"sunrise-logo "+(compact?"compact":"")}>
-    <div className="sunrise-symbol" aria-label="Sunrise Heavy Machine Service logo">
-      <span className="sun-core">S</span>
-      <span className="sun-ray r1"></span><span className="sun-ray r2"></span><span className="sun-ray r3"></span>
-      <span className="sun-ray r4"></span><span className="sun-ray r5"></span>
-    </div>
-    {!compact && <div className="sunrise-wordmark"><strong>SUNRISE</strong><span>HEAVY MACHINE SERVICE</span></div>}
+    <img src={REAL_LOGO} crossOrigin="anonymous" alt="Sunrise Heavy Machine Service" className="real-logo-img" />
   </div>;
 }
 
@@ -98,6 +111,7 @@ export default function App() {
       <Topbar screen={screen} />
       <div className="page-wrap">
         {screen==="dashboard" && <Dashboard counts={counts} billed={billed} records={records} onOpen={setScreen} />}
+        {screen==="analytics" && <AnalyticsDashboard records={records} />}
         {screen==="challans" && <DocumentModule type="Challan" records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>setFormMode({type:"Challan",editing:r})} onPreview={setPreviewDoc} />}
         {screen==="offers" && <DocumentModule type="Offer" records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>setFormMode({type:"Offer",editing:r})} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
         {screen==="invoices" && <DocumentModule type="Invoice" records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>setFormMode({type:"Invoice",editing:r})} onPreview={setPreviewDoc} />}
@@ -134,6 +148,7 @@ export default function App() {
 function Sidebar({screen,onChange}:{screen:Screen;onChange:(s:Screen)=>void}) {
   const nav = [
     ["dashboard","Dashboard",LayoutDashboard],
+    ["analytics","Analysis Dashboard",BarChart3],
     ["challans","Challans",Truck],
     ["offers","Offers",ClipboardList],
     ["invoices","Invoices",ReceiptText],
@@ -153,6 +168,7 @@ function Sidebar({screen,onChange}:{screen:Screen;onChange:(s:Screen)=>void}) {
 function Topbar({screen}:{screen:Screen}) {
   const titles:Record<Screen,[string,string]> = {
     dashboard:["Dashboard","Business overview"],
+    analytics:["Analysis Dashboard","Sales, customer, product and location intelligence"],
     challans:["Challans","Create and track delivery challans"],
     offers:["Offers / Quotations","Manage offers and convert accepted offers"],
     invoices:["Invoices","Create and manage tax invoices"],
@@ -189,6 +205,86 @@ function Dashboard({counts,billed,records,onOpen}:{counts:Record<DocType,number>
     <section className="panel">
       <div className="panel-head"><div><span className="eyebrow">RECENT ACTIVITY</span><h3>Latest documents</h3></div><button className="text-btn" onClick={()=>onOpen("documents")}>View all <ArrowRight size={15}/></button></div>
       <RecordsTable records={records.slice(0,7)} compact />
+    </section>
+  </>;
+}
+
+
+function AnalyticsDashboard({records}:{records:DocumentRecord[]}) {
+  const invoices=records.filter(r=>r.type==="Invoice");
+  const productMap=new Map<string,{name:string;qty:number;revenue:number}>();
+  const customerMap=new Map<string,{name:string;revenue:number;orders:number}>();
+  const stateMap=new Map<string,{state:string;customers:Set<string>;revenue:number}>();
+  const dateMap=new Map<string,{date:string;revenue:number;qty:number}>();
+
+  invoices.forEach(inv=>{
+    const invTotal=totals(inv.lines).total;
+    const c=customerMap.get(inv.customer)||{name:inv.customer||"Unknown",revenue:0,orders:0};
+    c.revenue+=invTotal;c.orders+=1;customerMap.set(inv.customer,c);
+
+    const state=GST_STATES[inv.stateCode]||inv.stateCode||"Unknown";
+    const s=stateMap.get(state)||{state,customers:new Set<string>(),revenue:0};
+    if(inv.customer) s.customers.add(inv.customer); s.revenue+=invTotal; stateMap.set(state,s);
+
+    const d=dateMap.get(inv.date)||{date:inv.date,revenue:0,qty:0};
+    d.revenue+=invTotal;
+    inv.lines.forEach(line=>{
+      const p=productMap.get(line.description)||{name:line.description||"Unknown",qty:0,revenue:0};
+      p.qty+=line.qty; p.revenue+=totals([line]).total; productMap.set(line.description,p);
+      d.qty+=line.qty;
+    });
+    dateMap.set(inv.date,d);
+  });
+
+  const productData=[...productMap.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+  const customerData=[...customerMap.values()].sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+  const stateData=[...stateMap.values()].map(x=>({state:x.state,customers:x.customers.size,revenue:x.revenue})).sort((a,b)=>b.revenue-a.revenue);
+  const dateData=[...dateMap.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  const totalRevenue=invoices.reduce((a,r)=>a+totals(r.lines).total,0);
+  const totalQty=invoices.reduce((a,r)=>a+r.lines.reduce((q,l)=>q+l.qty,0),0);
+  const uniqueCustomers=new Set(invoices.map(x=>x.customer).filter(Boolean)).size;
+  const uniqueStates=new Set(invoices.map(x=>x.stateCode).filter(Boolean)).size;
+
+  return <>
+    <section className="module-head">
+      <div className="module-icon violet"><BarChart3/></div>
+      <div className="module-copy"><h2>Sales Analysis Dashboard</h2><p>Invoice-based view of products, customers, customer locations and date-wise sales.</p></div>
+    </section>
+
+    <section className="kpi-grid">
+      <Kpi title="Invoice Revenue" value={money(totalRevenue)} subtitle={invoices.length+" invoices"} icon={BadgeIndianRupee}/>
+      <Kpi title="Units Sold" value={totalQty.toLocaleString("en-IN")} subtitle="Across invoiced products" icon={Boxes}/>
+      <Kpi title="Customers" value={String(uniqueCustomers)} subtitle="Unique billed customers" icon={Users}/>
+      <Kpi title="Customer States" value={String(uniqueStates)} subtitle="From GST state codes" icon={MapPin}/>
+    </section>
+
+    <div className="analytics-grid">
+      <section className="panel chart-panel">
+        <div className="panel-head"><div><span className="eyebrow">PRODUCT WISE</span><h3>Top products by revenue</h3></div></div>
+        {productData.length?<div className="chart-box"><ResponsiveContainer width="100%" height="100%"><BarChart data={productData} margin={{top:5,right:10,left:0,bottom:45}}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="name" angle={-28} textAnchor="end" interval={0} height={70} tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><Tooltip formatter={(v:any)=>money(Number(v))}/><Bar dataKey="revenue" fill="#b42318" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer></div>:<Empty label="Create invoices to see product analytics."/>}
+      </section>
+
+      <section className="panel chart-panel">
+        <div className="panel-head"><div><span className="eyebrow">DATE WISE</span><h3>Sales trend</h3></div></div>
+        {dateData.length?<div className="chart-box"><ResponsiveContainer width="100%" height="100%"><LineChart data={dateData}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><Tooltip formatter={(v:any)=>money(Number(v))}/><Line type="monotone" dataKey="revenue" stroke="#175cd3" strokeWidth={3} dot={{r:4}}/></LineChart></ResponsiveContainer></div>:<Empty label="No date-wise invoice sales yet."/>}
+      </section>
+
+      <section className="panel chart-panel">
+        <div className="panel-head"><div><span className="eyebrow">CUSTOMER WISE</span><h3>Top customers</h3></div></div>
+        <div className="table-scroll"><table><thead><tr><th>Customer</th><th>Invoices</th><th>Revenue</th></tr></thead><tbody>{customerData.length?customerData.map(c=><tr key={c.name}><td><strong>{c.name}</strong></td><td>{c.orders}</td><td>{money(c.revenue)}</td></tr>):<tr><td colSpan={3}><Empty label="No customer sales yet."/></td></tr>}</tbody></table></div>
+      </section>
+
+      <section className="panel chart-panel">
+        <div className="panel-head"><div><span className="eyebrow">LOCATION WISE</span><h3>Customer geography</h3></div></div>
+        <div className="table-scroll"><table><thead><tr><th>State</th><th>Customers</th><th>Revenue</th></tr></thead><tbody>{stateData.length?stateData.map(s=><tr key={s.state}><td><strong>{s.state}</strong></td><td>{s.customers}</td><td>{money(s.revenue)}</td></tr>):<tr><td colSpan={3}><Empty label="GST state data will appear here."/></td></tr>}</tbody></table></div>
+      </section>
+    </div>
+
+    <section className="panel">
+      <div className="panel-head"><div><span className="eyebrow">PRODUCT SALES REGISTER</span><h3>What sold, when and how much</h3></div></div>
+      <div className="table-scroll"><table><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>State</th><th>Product</th><th>Qty</th><th>Revenue</th></tr></thead><tbody>
+        {invoices.flatMap(inv=>inv.lines.map((l,i)=><tr key={inv.id+"-"+i}><td>{inv.date}</td><td><strong>{inv.no}</strong></td><td>{inv.customer}</td><td>{GST_STATES[inv.stateCode]||"—"}</td><td>{l.description}</td><td>{l.qty}</td><td>{money(totals([l]).total)}</td></tr>))}
+      </tbody></table></div>
     </section>
   </>;
 }
@@ -320,10 +416,15 @@ function DocumentForm({mode,products,records,onClose,onSave}:{mode:NonNullable<F
 
         <FormSection number="02" title="Customer"><div className="form-grid">
           <label>Customer Name<input value={doc.customer} onChange={e=>setDoc({...doc,customer:e.target.value})}/></label>
-          <label>GSTIN<input value={doc.gstin} onChange={e=>setDoc({...doc,gstin:e.target.value})}/></label>
+          <label>GSTIN<input value={doc.gstin} onChange={e=>{
+            const gst=e.target.value.toUpperCase().replace(/\s/g,"");
+            const code=gst.slice(0,2);
+            setDoc({...doc,gstin:gst,stateCode:GST_STATES[code]?code:doc.stateCode});
+          }}/></label>
           <label>Billing Address<textarea value={doc.billingAddress} onChange={e=>setDoc({...doc,billingAddress:e.target.value})}/></label>
           <label>Shipping Address<textarea value={doc.shippingAddress} onChange={e=>setDoc({...doc,shippingAddress:e.target.value})}/></label>
-          <label>State Code<input value={doc.stateCode} onChange={e=>setDoc({...doc,stateCode:e.target.value})}/></label>
+          <label>State Code<input value={doc.stateCode} readOnly placeholder="Auto from GSTIN"/></label>
+          <label>State / Location<input value={GST_STATES[doc.stateCode]||""} readOnly placeholder="Auto from GSTIN"/></label>
         </div></FormSection>
 
         <FormSection number="03" title="Items & services" action={<button className="secondary-btn small" onClick={()=>setDoc({...doc,lines:[...doc.lines,{description:"",partNo:"",hsn:"",qty:1,rate:0,discount:0,gst:18}]})}><Plus size={15}/> Add line</button>}>
@@ -350,6 +451,26 @@ function DocumentForm({mode,products,records,onClose,onSave}:{mode:NonNullable<F
 function DocumentPreview({doc,onClose}:{doc:DocumentRecord;onClose:()=>void}) {
   const meta=typeMeta[doc.type];
   const sum=totals(doc.lines);
+  const downloadPdf = async () => {
+    const el=document.getElementById("print-document");
+    if(!el) return;
+    const canvas=await html2canvas(el,{scale:2,useCORS:true,backgroundColor:"#ffffff"});
+    const img=canvas.toDataURL("image/png");
+    const pdf=new jsPDF("p","mm","a4");
+    const pageW=210,pageH=297;
+    const imgH=canvas.height*pageW/canvas.width;
+    let heightLeft=imgH;
+    let position=0;
+    pdf.addImage(img,"PNG",0,position,pageW,imgH,undefined,"FAST");
+    heightLeft-=pageH;
+    while(heightLeft>0){
+      position=heightLeft-imgH;
+      pdf.addPage();
+      pdf.addImage(img,"PNG",0,position,pageW,imgH,undefined,"FAST");
+      heightLeft-=pageH;
+    }
+    pdf.save(`${doc.no}.pdf`);
+  };
   return <div className="overlay preview-overlay"><div className="modal preview-modal">
     <div className="modal-head no-print"><div className="modal-brand"><SunriseLogo/><div><span className="eyebrow">DOCUMENT PREVIEW</span><h3>{meta.label} · {doc.no}</h3></div></div><button className="close-btn" onClick={onClose}><X/></button></div>
     <div className="document-sheet" id="print-document">
@@ -373,7 +494,7 @@ function DocumentPreview({doc,onClose}:{doc:DocumentRecord;onClose:()=>void}) {
         <div className="signature"><span>For {COMPANY.name}</span><strong>Authorised Signatory</strong></div>
       </div>
     </div>
-    <div className="modal-actions no-print"><button className="secondary-btn" onClick={onClose}>Close</button><button className="primary-btn" onClick={()=>window.print()}><Printer size={16}/> Print / Save PDF</button></div>
+    <div className="modal-actions no-print"><button className="secondary-btn" onClick={onClose}>Close</button><button className="secondary-btn" onClick={()=>window.print()}><Printer size={16}/> Print</button><button className="primary-btn" onClick={downloadPdf}><FileText size={16}/> Download PDF</button></div>
   </div></div>;
 }
 
