@@ -397,3 +397,72 @@ input:hover,select:hover,textarea:hover{border-color:#b8c0cc}
   .item-toolbar-actions{grid-template-columns:1fr}
   .item-toolbar-actions .count-chip{grid-column:auto}
 }
+
+/* --- v3.7 Item editor modal refinement --- */
+.small-modal{
+  width:min(680px,calc(100vw - 32px));
+  min-height:0;
+  background:#fff;
+  border-radius:20px;
+  overflow:hidden;
+  box-shadow:0 28px 80px rgba(16,24,40,.24);
+}
+.small-modal .modal-head{
+  padding:18px 22px;
+  border-bottom:1px solid #eaecf0;
+  align-items:flex-start;
+}
+.small-modal .modal-head h3{
+  margin-top:2px;
+  font-size:21px;
+  letter-spacing:-.02em;
+}
+.small-modal .form-grid{
+  padding:20px 22px 8px;
+  gap:16px 12px;
+}
+.small-modal label{
+  gap:7px;
+  font-size:11px;
+  color:#344054;
+}
+.small-modal input{
+  min-height:42px;
+  border-radius:10px;
+  padding:10px 12px;
+}
+.small-modal .modal-actions{
+  margin-top:12px;
+  padding:16px 22px 18px;
+  border-top:1px solid #eaecf0;
+  background:#fafbfc;
+}
+.small-modal .modal-actions .secondary-btn,
+.small-modal .modal-actions .primary-btn{
+  min-width:110px;
+  justify-content:center;
+}
+@media(max-width:760px){
+  .small-modal{
+    width:100%;
+    min-height:100dvh;
+    border-radius:0;
+  }
+  .small-modal .form-grid{
+    padding:16px 14px 8px;
+    grid-template-columns:1fr!important;
+  }
+  .small-modal .modal-head{
+    padding:14px;
+  }
+  .small-modal .modal-actions{
+    padding:12px 14px max(14px,env(safe-area-inset-bottom));
+    position:sticky;
+    bottom:0;
+  }
+  .small-modal .modal-actions .secondary-btn,
+  .small-modal .modal-actions .primary-btn{
+    min-width:0;
+    flex:1;
+  }
+}
