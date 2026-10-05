@@ -115,3 +115,25 @@
 .status-toggle{border:0;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:800}.status-toggle.on{background:#ecfdf3;color:#027a48}.status-toggle.off{background:#f2f4f7;color:#667085}.status-toggle:disabled{opacity:.6;cursor:not-allowed}
 .icon-btn.danger:hover{background:#fef3f2;border-color:#fda29b}
 @media(max-width:900px){.login-page{grid-template-columns:1fr}.login-visual{display:none}.login-card{margin:30px auto}.login-logo{display:block}.user-admin-grid{grid-template-columns:1fr}}
+
+/* --- v3.4 refined login --- */
+.login-page{min-height:100vh;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(420px,.9fr);background:#f7f9fc}
+.login-showcase{position:relative;min-height:100vh;background:url("https://raw.githubusercontent.com/abhay-pal/sunrise_website/main/public/images/hero-bg.jpg") center/cover no-repeat;overflow:hidden}
+.login-showcase-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(16,24,40,.97),rgba(16,24,40,.78) 58%,rgba(180,35,24,.72))}
+.login-showcase-content{position:relative;z-index:1;height:100%;padding:52px 58px;display:flex;flex-direction:column;justify-content:flex-end;color:#fff}
+.login-showcase-content>.sunrise-logo{position:absolute;left:58px;top:44px}
+.login-showcase-content .real-logo-img{height:72px;max-width:260px;filter:drop-shadow(0 8px 20px rgba(0,0,0,.2))}
+.login-badge{width:max-content;display:flex;align-items:center;gap:8px;padding:8px 11px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.1);backdrop-filter:blur(10px);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.login-showcase h1{font:800 clamp(40px,4.5vw,68px)/1.02 Manrope,Inter,sans-serif;letter-spacing:-.05em;margin:18px 0 16px;max-width:760px}
+.login-showcase p{max-width:650px;color:#d0d5dd;font-size:15px;line-height:1.75;margin:0 0 25px}
+.login-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:590px}
+.login-feature-grid>div{display:flex;align-items:center;gap:9px;padding:12px 13px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);font-size:11px;font-weight:700}
+.login-panel{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:42px 28px;position:relative}
+.login-card{width:min(460px,100%);background:#fff;border:1px solid #eaecf0;border-radius:24px;padding:34px;box-shadow:0 24px 70px rgba(16,24,40,.12);display:grid;gap:17px}
+.login-logo{display:none}.login-heading h2{font:800 31px/1.1 Manrope,Inter,sans-serif;margin:0;color:#101828}.login-heading p{color:#667085;font-size:13px;margin:8px 0 0}
+.login-card label{font-size:12px;color:#344054}.login-card input{height:46px;border-radius:11px;padding:0 13px;background:#fff}
+.password-field{height:46px;border:1px solid #d0d5dd;border-radius:11px;padding:0 12px;background:#fff}.password-field:focus-within{border-color:#f97066;box-shadow:0 0 0 4px #fee4e2}.password-field input{height:44px}
+.login-submit{height:47px;border-radius:11px;font-size:13px;margin-top:2px}
+.demo-login{display:grid;grid-template-columns:1fr;gap:7px;background:#f8fafc;border:1px solid #eaecf0;border-radius:12px;padding:13px}.demo-login>div{display:flex;justify-content:space-between;gap:10px}.demo-login>div span{font-size:10px;color:#98a2b3}.demo-login code{display:block;background:#fff;border:1px solid #e4e7ec;border-radius:8px;padding:7px 9px;font-size:11px;color:#475467}
+.login-footer{position:absolute;bottom:20px;color:#98a2b3;font-size:10px}
+@media(max-width:980px){.login-page{grid-template-columns:1fr}.login-showcase{display:none}.login-panel{min-height:100vh}.login-logo{display:block}.login-logo .real-logo-img{height:64px;max-width:240px}.login-footer{position:static;margin-top:20px}}
