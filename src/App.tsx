@@ -98,6 +98,7 @@ export default function App() {
   useEffect(()=>{ if(session) localStorage.setItem("sunrise_session_v1",JSON.stringify(session)); else localStorage.removeItem("sunrise_session_v1"); },[session]);
 
   const currentUser = users.find(u=>u.id===session?.userId && u.active) || null;
+  const currentRole:Role = currentUser?.role || "Viewer";
 
   const counts = useMemo(()=>({
     Challan:records.filter(r=>r.type==="Challan").length,
@@ -108,11 +109,11 @@ export default function App() {
   const billed = useMemo(()=>records.filter(r=>r.type==="Invoice").reduce((a,r)=>a+totals(r.lines).total,0),[records]);
 
   const openCreate = (type:DocType, fromOffer?:DocumentRecord) => {
-    if(!can(currentUser.role,"create")) return;
+    if(!can(currentRole,"create")) return;
     setFormMode({type,fromOffer});
   };
   const deleteRecord = (record:DocumentRecord) => {
-    if(!can(currentUser.role,"delete")) return;
+    if(!can(currentRole,"delete")) return;
     if(window.confirm(`Delete ${record.type} ${record.no}? This cannot be undone.`)){
       setRecords(prev=>prev.filter(x=>x.id!==record.id));
     }
@@ -139,11 +140,11 @@ export default function App() {
       <div className="page-wrap">
         {screen==="dashboard" && <Dashboard counts={counts} billed={billed} records={records} onOpen={setScreen} />}
         {screen==="analytics" && <AnalyticsDashboard records={records} />}
-        {screen==="challans" && <DocumentModule type="Challan" role={currentUser.role} records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>can(currentUser.role,"edit")&&setFormMode({type:"Challan",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
-        {screen==="offers" && <DocumentModule type="Offer" role={currentUser.role} records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>can(currentUser.role,"edit")&&setFormMode({type:"Offer",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
-        {screen==="invoices" && <DocumentModule type="Invoice" role={currentUser.role} records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>can(currentUser.role,"edit")&&setFormMode({type:"Invoice",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
+        {screen==="challans" && <DocumentModule type="Challan" role={currentUser.role} records={records} onCreate={()=>openCreate("Challan")} onEdit={r=>can(currentRole,"edit")&&setFormMode({type:"Challan",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
+        {screen==="offers" && <DocumentModule type="Offer" role={currentUser.role} records={records} onCreate={()=>openCreate("Offer")} onEdit={r=>can(currentRole,"edit")&&setFormMode({type:"Offer",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} onConvert={r=>openCreate("Invoice",r)} />}
+        {screen==="invoices" && <DocumentModule type="Invoice" role={currentUser.role} records={records} onCreate={()=>openCreate("Invoice")} onEdit={r=>can(currentRole,"edit")&&setFormMode({type:"Invoice",editing:r})} onDelete={deleteRecord} onPreview={setPreviewDoc} />}
         {screen==="documents" && <AllDocuments records={records} onGo={setScreen} />}
-        {screen==="items" && <ItemMaster role={currentUser.role} products={products} onAdd={()=>can(currentUser.role,"create")&&setItemModal({item:{description:"",partNo:"",hsn:"",salePrice:0,purchasePrice:0}})} onEdit={(item,index)=>can(currentUser.role,"edit")&&setItemModal({item,index})} />}
+        {screen==="items" && <ItemMaster role={currentUser.role} products={products} onAdd={()=>can(currentRole,"create")&&setItemModal({item:{description:"",partNo:"",hsn:"",salePrice:0,purchasePrice:0}})} onEdit={(item,index)=>can(currentRole,"edit")&&setItemModal({item,index})} />}
         {screen==="users" && currentUser.role==="Admin" && <UserManagement users={users} currentUser={currentUser} onChange={setUsers} />}
         {screen==="settings" && <SettingsPanel />}
       </div>
