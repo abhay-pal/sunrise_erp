@@ -544,16 +544,32 @@ function LoginPage({users,onLogin}:{users:UserAccount[];onLogin:(u:UserAccount)=
     setError("");onLogin(user);
   };
   return <div className="login-page">
-    <div className="login-visual"><SunriseLogo/><div><span className="hero-tag">SUNRISE ERP</span><h1>Business documents.<br/>Controlled access.</h1><p>Challan, quotation, invoicing and sales intelligence in one secure workspace.</p></div></div>
-    <form className="login-card" onSubmit={submit}>
-      <div className="login-logo"><SunriseLogo/></div>
-      <span className="eyebrow">WELCOME BACK</span><h2>Sign in to ERP</h2><p>Use your assigned Sunrise ERP account.</p>
-      <label>Email<input autoFocus type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@company.com" required/></label>
-      <label>Password<div className="password-field"><KeyRound size={16}/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password" required/></div></label>
-      {error&&<div className="login-error">{error}</div>}
-      <button className="primary-btn block" type="submit">Sign In</button>
-      <div className="demo-login"><strong>First login</strong><span>admin@sunrise.local</span><span>Admin@123</span></div>
-    </form>
+    <section className="login-showcase">
+      <div className="login-showcase-overlay"></div>
+      <div className="login-showcase-content">
+        <SunriseLogo/>
+        <div className="login-badge"><Shield size={15}/> Secure role-based ERP</div>
+        <h1>Control documents.<br/>Understand the business.</h1>
+        <p>Create challans, quotations and GST invoices, then track product, customer and location performance from one workspace.</p>
+        <div className="login-feature-grid">
+          <div><ReceiptText size={18}/><span>GST Invoicing</span></div>
+          <div><BarChart3 size={18}/><span>Live Analytics</span></div>
+          <div><Users size={18}/><span>Role Access</span></div>
+        </div>
+      </div>
+    </section>
+    <section className="login-panel">
+      <form className="login-card" onSubmit={submit}>
+        <div className="login-logo"><SunriseLogo/></div>
+        <div className="login-heading"><span className="eyebrow">SUNRISE ERP</span><h2>Welcome back</h2><p>Sign in with your assigned account to continue.</p></div>
+        <label>Email address<input autoFocus type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@sunrise.com" required/></label>
+        <label>Password<div className="password-field"><KeyRound size={16}/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Enter password" required/></div></label>
+        {error&&<div className="login-error">{error}</div>}
+        <button className="primary-btn block login-submit" type="submit">Sign In <ArrowRight size={16}/></button>
+        <div className="demo-login"><div><strong>First admin login</strong><span>Use these credentials for setup</span></div><code>admin@sunrise.local</code><code>Admin@123</code></div>
+      </form>
+      <div className="login-footer">Sunrise Heavy Machine Service · ERP v3</div>
+    </section>
   </div>;
 }
 
